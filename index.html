@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=0" />
+    <title>document</title>
+  </head>
+  <body>
+    <div id="app">{{name}}</div>
+    <script src="./dist/vue.js"></script>
+    <script type="text/javascript">
+      let vm = new Vue({
+        el: '#app',
+        data() {
+          return {
+            name: 'susa3n',
+            a:[{name:'a'}]
+          }
+        }
+      })
+      setTimeout(() => {
+        vm.a.splice(1,0,[{name:'b'}])
+      }, 1000);
+    </script>
+  </body>
+</html>
