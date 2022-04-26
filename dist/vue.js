@@ -39,6 +39,65 @@
     return Constructor;
   }
 
+  function _slicedToArray(arr, i) {
+    return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _unsupportedIterableToArray(arr, i) || _nonIterableRest();
+  }
+
+  function _arrayWithHoles(arr) {
+    if (Array.isArray(arr)) return arr;
+  }
+
+  function _iterableToArrayLimit(arr, i) {
+    var _i = arr == null ? null : typeof Symbol !== "undefined" && arr[Symbol.iterator] || arr["@@iterator"];
+
+    if (_i == null) return;
+    var _arr = [];
+    var _n = true;
+    var _d = false;
+
+    var _s, _e;
+
+    try {
+      for (_i = _i.call(arr); !(_n = (_s = _i.next()).done); _n = true) {
+        _arr.push(_s.value);
+
+        if (i && _arr.length === i) break;
+      }
+    } catch (err) {
+      _d = true;
+      _e = err;
+    } finally {
+      try {
+        if (!_n && _i["return"] != null) _i["return"]();
+      } finally {
+        if (_d) throw _e;
+      }
+    }
+
+    return _arr;
+  }
+
+  function _unsupportedIterableToArray(o, minLen) {
+    if (!o) return;
+    if (typeof o === "string") return _arrayLikeToArray(o, minLen);
+    var n = Object.prototype.toString.call(o).slice(8, -1);
+    if (n === "Object" && o.constructor) n = o.constructor.name;
+    if (n === "Map" || n === "Set") return Array.from(o);
+    if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen);
+  }
+
+  function _arrayLikeToArray(arr, len) {
+    if (len == null || len > arr.length) len = arr.length;
+
+    for (var i = 0, arr2 = new Array(len); i < len; i++) arr2[i] = arr[i];
+
+    return arr2;
+  }
+
+  function _nonIterableRest() {
+    throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
+  }
+
   function isFunction(value) {
     return typeof value === 'function';
   }
@@ -219,6 +278,227 @@
     });
   }
 
+  var ncname = "[a-zA-Z_][\\-\\.0-9_a-zA-Z]*"; // abc-aaa
+
+  var qnameCapture = "((?:".concat(ncname, "\\:)?").concat(ncname, ")"); // <aaa:asdads>
+  //  /^<((?:[a-zA-Z_][\-\.0-9_a-zA-Z]*\:)?[a-zA-Z_][\-\.0-9_a-zA-Z]*)/
+
+  var startTagOpen = new RegExp("^<".concat(qnameCapture)); // 标签开头的正则 捕获的内容是标签名 
+  // /^<\/((?:[a-zA-Z_][\-\.0-9_a-zA-Z]*\:)?[a-zA-Z_][\-\.0-9_a-zA-Z]*)[^>]*>/
+
+  var endTag = new RegExp("^<\\/".concat(qnameCapture, "[^>]*>")); // 匹配标签结尾的 </div>
+
+  var attribute = /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/; // 匹配属性的
+
+  var startTagClose = /^\s*(\/?)>/; // 匹配标签结束的 >  <div>
+
+  var root = null;
+  var currParent;
+  var stack = [];
+  var ELEMENT_TYPE = 1; // 标签节点  
+
+  var TEXT_TYPE = 3; // 文本节点
+  // 将html字符串通过正则的形式解析出ast
+
+  function parserHtml(html) {
+    // <div id="app"></app>
+    while (html) {
+      // 循环解析
+      var textEnd = html.indexOf('<'); // 查看是否以<开头
+
+      if (textEnd == 0) {
+        var startTagMatch = parseStartTag(); // 解析开始标签
+
+        if (startTagMatch) {
+          start(startTagMatch.tagName, startTagMatch.attrs);
+          continue;
+        }
+
+        var endTagMatch = parseEndTag();
+
+        if (endTagMatch) {
+          end(endTagMatch[1]);
+          continue;
+        }
+      }
+
+      var text = void 0;
+
+      if (textEnd > 0) {
+        text = html.substring(0, textEnd);
+      }
+
+      if (text) {
+        chars(text);
+        advance(text.length);
+      }
+    }
+
+    function parseStartTag() {
+      var start = html.match(startTagOpen); // 将模板字符串匹配开始标签
+
+      if (start) {
+        // 匹配到 创建match对象保存当前 开始标签名 默认属性为空
+        var match = {
+          tagName: start[1],
+          attrs: []
+        };
+        advance(start[0].length); // 截取已经匹配到的开始标签
+
+        var _end, attr; // 循环匹配 不结束标签 和 属性 当两者同时成立时 拿去匹配到的属性名和属性值 push到 match中 
+
+
+        while (!(_end = html.match(startTagClose)) && (attr = html.match(attribute))) {
+          match.attrs.push({
+            name: attr[1],
+            value: attr[3] || attr[4] || attr[5]
+          });
+          advance(attr[0].length); // 截取已经匹配到的属性
+        }
+
+        if (_end) {
+          // 当匹配到结束标签时
+          advance(_end[0].length);
+          return match;
+        }
+      }
+    }
+
+    function parseEndTag() {
+      var endTagMatch = html.match(endTag); // 将模板字符串匹配开始标签
+
+      advance(endTagMatch[0].length);
+      return endTagMatch;
+    }
+
+    function advance(len) {
+      html = html.substring(len);
+    }
+
+    return root;
+  }
+
+  function createElement(tagName, attrs) {
+    return {
+      type: ELEMENT_TYPE,
+      tag: tagName,
+      children: [],
+      attrs: attrs,
+      parent: null
+    };
+  }
+
+  function start(tagName, tagAttrs) {
+    var element = createElement(tagName, tagAttrs);
+
+    if (!root) {
+      root = element;
+    }
+
+    stack.push(element);
+    currParent = element;
+  }
+
+  function end(tagName) {
+    var currentElement = stack.pop();
+    var parentElement = stack[stack.length - 1];
+
+    if (tagName == currentElement.tag) {
+      if (parentElement) {
+        parentElement.children.push(currentElement);
+        currentElement.parent = parentElement;
+      }
+    }
+  }
+
+  function chars(text) {
+    text = text.replace(/\s/g, '');
+
+    if (text) {
+      currParent.children.push({
+        type: TEXT_TYPE,
+        text: text
+      });
+    }
+  }
+
+  var defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g; // 匹配插值语法
+
+  function geneProps(attrs) {
+    var props = "";
+    attrs.forEach(function (attr) {
+      if (attr.name === 'style') {
+        var obj = {};
+        attr.value.split(';').forEach(function (styleItem) {
+          var _styleItem$split = styleItem.split(':'),
+              _styleItem$split2 = _slicedToArray(_styleItem$split, 2),
+              key = _styleItem$split2[0],
+              value = _styleItem$split2[1];
+
+          obj[key] = "".concat(value);
+        });
+        attr.value = obj;
+      }
+
+      props += "".concat(attr.name, ":").concat(JSON.stringify(attr.value), ",");
+    });
+    return "{".concat(props.slice(0, -1), "}");
+  }
+
+  function gen(node) {
+    if (node.type == 1) {
+      return generate(node);
+    } else {
+      var text = node.text;
+      var tokens = [];
+      var match;
+      var lastIndex = defaultTagRE.lastIndex = 0;
+
+      while (match = defaultTagRE.exec(text)) {
+        var index = match.index; //开始索引
+
+        if (index > lastIndex) {
+          tokens.push(JSON.stringify(text.slice(lastIndex, index))); // 截取普通字符串
+        }
+
+        tokens.push(match[1].trim()); // 截取插值语法字符串
+
+        lastIndex = index + match[0].length;
+      }
+
+      if (lastIndex < text.length) {
+        tokens.push(text.slice(lastIndex));
+      }
+
+      return "_v(".concat(tokens.join('+'), ")");
+    }
+  }
+
+  function geneChildren(root) {
+    var children = root.children;
+
+    if (children && children.length > 0) {
+      return children.map(function (c) {
+        return gen(c);
+      }).join(',');
+    } else {
+      return false;
+    }
+  }
+
+  function generate(root) {
+    var children = geneChildren(root);
+    var code = "_c('".concat(root.tag, "',").concat(root.attrs.length > 0 ? geneProps(root.attrs) : undefined).concat(children ? ",".concat(children) : '', ")");
+    console.log(code);
+    return code;
+  }
+
+  function compileToFunction(template) {
+    var root = parserHtml(template); // 编译模板字符串 转为 ast语法
+
+    generate(root); // console.log(code);
+  }
+
   function initMixin(Vue) {
     Vue.prototype._init = function (options) {
       var vm = this; // 缓存this 保存到当前作用域
@@ -227,6 +507,29 @@
       // 对数据进行初始化 比如 data  computed watch ...
 
       initState(vm);
+
+      if (vm.$options.el) {
+        vm.$mount(vm.$options.el); // 挂载界面，如果当前配置项有el属性，传入当前el
+      }
+    };
+
+    Vue.prototype.$mount = function (el) {
+      var vm = this;
+      var options = vm.$options;
+      el = document.querySelector(el);
+
+      if (!options.render) {
+        // render配置项高于el
+        var template = options.template;
+
+        if (!template && el) {
+          // 判断配置项是否有template属性  如果没有就拿el的outerHTML
+          template = el.outerHTML; // 模板字符串  之后通过正则进行匹配 将模板字符串转为render渲染函数
+
+          var render = compileToFunction(template);
+          options.render = render; // 挂载到配置项中，以后数据发生变化 可以通过配置项直接执行渲染函数
+        }
+      }
     };
   }
 

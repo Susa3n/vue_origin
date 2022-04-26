@@ -1,5 +1,5 @@
 import { isFunction } from "./utils" // 引入工具函数判断当前值是否是函数类型
-import { observe } from "./Observer/index"
+import { observe } from "./observer/index"
 export function initState(vm) {
   const opts = vm.$options 
   if(opts.data) { // 如果选项中有data
@@ -23,7 +23,6 @@ function initData(vm) { // 初始化data方法
   for (const key in data) { // 通过proxy代理将data上的数据定义vm上，当读取属性时还是走的observe
     proxy(vm,'_data',key)
   }
-
   // 观测数据 将数据变为响应式的
   observe(data)
 }

@@ -1,26 +1,40 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=0" />
-    <title>document</title>
-  </head>
-  <body>
-    <div id="app">{{name}}</div>
-    <script src="./dist/vue.js"></script>
-    <script type="text/javascript">
-      let vm = new Vue({
-        el: '#app',
-        data() {
-          return {
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=0" />
+  <title>document</title>
+</head>
+
+<body>
+  <!-- _c('div'),{id:'app',class:'warp'},_v -->
+  <div id="app" class='warp' style="font-size: 16px;color:red">
+    <span>hello {{name}}  word</span>
+    <ul >
+      <li>{{person.name}}</li>
+      <li>{{person.age}}</li>
+    </ul>
+  </div>
+  <script src="./dist/vue.js"></script>
+  <script type="text/javascript">
+    let vm = new Vue({
+      el: '#app',
+      data() {
+        return {
+          name: 'lisi',
+          person: {
             name: 'susa3n',
-            a:[{name:'a'}]
-          }
+            age: 18
+          },
+          a: [{ name: 'a' }]
         }
-      })
-      setTimeout(() => {
-        vm.a.splice(1,0,[{name:'b'}])
-      }, 1000);
-    </script>
-  </body>
+      }
+    })
+    setTimeout(() => {
+      vm.a.splice(1, 0, [{ name: 'b' }])
+    }, 1000);
+  </script>
+</body>
+
 </html>
