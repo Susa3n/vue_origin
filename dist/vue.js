@@ -427,55 +427,67 @@
   function geneProps(attrs) {
     var props = "";
     attrs.forEach(function (attr) {
+      // 遍历当前节点的属性list  {id:'app',class:'classA',style: {font-size: '14px',color:'red'}}
       if (attr.name === 'style') {
-        var obj = {};
+        // 如果当前属性item的name为style {font-size: '14px';color:'red'}
+        var obj = {}; // 定义空对象
+
         attr.value.split(';').forEach(function (styleItem) {
+          // 拿到当前value进行split  [font-size: '14px',color:'red']
           var _styleItem$split = styleItem.split(':'),
               _styleItem$split2 = _slicedToArray(_styleItem$split, 2),
               key = _styleItem$split2[0],
-              value = _styleItem$split2[1];
+              value = _styleItem$split2[1]; // [key: 'font-size',value: '14px']  [key: 'color',value: 'red']
 
-          obj[key] = "".concat(value);
+
+          obj[key] = "".concat(value); // obj = {font-size: '14px',color: 'red'}
         });
-        attr.value = obj;
+        attr.value = obj; // attr.style = {font-size: '14px',color: 'red'}
       }
 
-      props += "".concat(attr.name, ":").concat(JSON.stringify(attr.value), ",");
+      props += "".concat(attr.name, ":").concat(JSON.stringify(attr.value), ","); // 如果name不是style,直接拼:props = id:'app',class:'classA',style:{font-size: '14px';color:'red'}
     });
-    return "{".concat(props.slice(0, -1), "}");
+    return "{".concat(props.slice(0, -1), "}"); // return {id:'app',class:'classA',style:{font-size: '14px';color:'red'}}
   }
 
   function gen(node) {
     if (node.type == 1) {
+      // 如果当前节点为为标签节点  递归调用generate方法
       return generate(node);
     } else {
-      var text = node.text;
-      var tokens = [];
+      // 如果是文本节点
+      var text = node.text; // 获取文本内容
+
+      var tokens = []; // 定义空数组 方便依次递加
+
       var match;
-      var lastIndex = defaultTagRE.lastIndex = 0;
+      var lastIndex = defaultTagRE.lastIndex = 0; // defaultTagRE插值语法{{}} 匹配每次用exec匹配时候默认最后一次匹配项为0
 
       while (match = defaultTagRE.exec(text)) {
-        var index = match.index; //开始索引
+        // while循环去匹配当前text = "hello  {{name}}  word"
+        var index = match.index; //开始索引 第一次匹配到的index  hello  的长度
 
         if (index > lastIndex) {
+          // 将hello  push到tokens中
           tokens.push(JSON.stringify(text.slice(lastIndex, index))); // 截取普通字符串
         }
 
-        tokens.push(match[1].trim()); // 截取插值语法字符串
+        tokens.push("_s(".concat(match[1].trim(), ")")); // 截取插值语法字符串push到tokens中
 
-        lastIndex = index + match[0].length;
+        lastIndex = index + match[0].length; // 将当前lastIndex = hello  {{name}}的长度 循环匹配直至最后一次 
       }
 
       if (lastIndex < text.length) {
-        tokens.push(text.slice(lastIndex));
+        // 将最后的  word push到tokens中
+        tokens.push(JSON.stringify(text.slice(lastIndex)));
       }
 
-      return "_v(".concat(tokens.join('+'), ")");
+      return "_v(".concat(tokens.join('+'), ")"); // 转为字符串return
     }
   }
 
   function geneChildren(root) {
-    var children = root.children;
+    var children = root.children; // 拿到当前children 判断children是否大于0 继续转化子节点 
 
     if (children && children.length > 0) {
       return children.map(function (c) {
@@ -487,16 +499,52 @@
   }
 
   function generate(root) {
-    var children = geneChildren(root);
+    // 传入ast语法树
+    var children = geneChildren(root); // 转化当前传入的root.children
+    //  geneProps(root.attrs) 转化 当前节点的属性
+
     var code = "_c('".concat(root.tag, "',").concat(root.attrs.length > 0 ? geneProps(root.attrs) : undefined).concat(children ? ",".concat(children) : '', ")");
-    console.log(code);
     return code;
   }
 
   function compileToFunction(template) {
     var root = parserHtml(template); // 编译模板字符串 转为 ast语法
 
-    generate(root); // console.log(code);
+    var code = generate(root);
+    var render = new Function("with(this){ return ".concat(code, "}")); // console.log(render.call(vm));
+
+    return render;
+  } // vue2 模板编译的顺序
+  // template模板 通过正则while匹配 匹配成ast语法（组合成树）
+  // ast => 递归遍历每个节点  编译成code字符串 _c('div',{id: 'app'},_c(span,undefined,_v('hello'+ _s(name) + 'world')))
+  // 生成render函数（new Function + with）
+  // return  render函数 通过.call调用 指定with参数this 
+  // let obj = {name:'sau3n'}
+  // with(obj) {
+  //   console.log(name);
+  // }
+
+  function patch(el, vnode) {
+    console.log(el, vnode);
+  }
+
+  function lifecycleMixin(Vue) {
+    Vue.prototype._update = function (vnode) {
+      var vm = this;
+      patch(vm.$el, vnode); // 需要用虚拟节点创建出真实节点 替换掉 真实的$el
+      // 我要通过虚拟节点 渲染出真实的dom
+    };
+  }
+  function mountComponent(vm, el) {
+    vm.$options;
+    console.log(el);
+    vm.$el = el;
+
+    var updateComponent = function updateComponent() {
+      vm._update(vm._render());
+    };
+
+    updateComponent();
   }
 
   function initMixin(Vue) {
@@ -526,10 +574,60 @@
           // 判断配置项是否有template属性  如果没有就拿el的outerHTML
           template = el.outerHTML; // 模板字符串  之后通过正则进行匹配 将模板字符串转为render渲染函数
 
-          var render = compileToFunction(template);
+          var render = compileToFunction(template); // 拿到render函数
+
           options.render = render; // 挂载到配置项中，以后数据发生变化 可以通过配置项直接执行渲染函数
         }
       }
+
+      mountComponent(vm, el); // 拿到render函数后 渲染界面
+    };
+  }
+
+  function createElementNode(tagName) {
+    var data = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+    var key = data.key;
+
+    if (key) {
+      delete data.key;
+    }
+
+    for (var _len = arguments.length, children = new Array(_len > 2 ? _len - 2 : 0), _key = 2; _key < _len; _key++) {
+      children[_key - 2] = arguments[_key];
+    }
+
+    return vnode(tagName, data, key, children, undefined);
+  }
+  function createTextNode(text) {
+    return vnode(undefined, undefined, undefined, undefined, text);
+  }
+
+  function vnode(tagName, data, key, children, text) {
+    return {
+      tagName: tagName,
+      data: data,
+      key: key,
+      children: children,
+      text: text
+    };
+  }
+
+  function renderMixin(Vue) {
+    Vue.prototype._c = function () {
+      return createElementNode.apply(void 0, arguments);
+    };
+
+    Vue.prototype._v = function (text) {
+      return createTextNode(text);
+    };
+
+    Vue.prototype._s = function (val) {
+      return val === null ? '' : _typeof(val) === 'object' ? JSON.stringify(val) : val;
+    };
+
+    Vue.prototype._render = function () {
+      var render = this.$options.render;
+      return render.call(this);
     };
   }
 
@@ -540,6 +638,9 @@
   }
 
   initMixin(Vue); // 给Vue的原型添加_init的方法，传入Vue
+
+  renderMixin(Vue);
+  lifecycleMixin(Vue);
 
   return Vue;
 

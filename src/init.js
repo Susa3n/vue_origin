@@ -1,5 +1,6 @@
 import { initState } from "./state"
 import { compileToFunction } from "./compiler/index"
+import { mountComponent } from "./lifecycle"
 
 export function initMixin(Vue) {
   Vue.prototype._init = function(options) {
@@ -21,10 +22,11 @@ export function initMixin(Vue) {
       let template = options.template
       if(!template && el) { // 判断配置项是否有template属性  如果没有就拿el的outerHTML
         template = el.outerHTML // 模板字符串  之后通过正则进行匹配 将模板字符串转为render渲染函数
-        let render = compileToFunction(template)
+        let render = compileToFunction(template) // 拿到render函数
         options.render = render // 挂载到配置项中，以后数据发生变化 可以通过配置项直接执行渲染函数
       }
-    } 
+    }
+    mountComponent(vm,el) // 拿到render函数后 渲染界面
   }
 
 }
