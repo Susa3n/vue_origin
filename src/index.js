@@ -7,6 +7,6 @@ function Vue (options) {
 }
 
 initMixin(Vue) // 给Vue的原型添加_init的方法，传入Vue
-renderMixin(Vue)
+renderMixin(Vue) // 给Vue原型添加_c _v _s _render 方法
 lifecycleMixin(Vue)
 export default Vue

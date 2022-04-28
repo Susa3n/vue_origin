@@ -524,20 +524,94 @@
   //   console.log(name);
   // }
 
-  function patch(el, vnode) {
-    console.log(el, vnode);
+  function patch(oldElm, vnode) {
+    var isRealDom = oldElm.nodeType;
+
+    if (isRealDom) {
+      var el = createElm(vnode); // 根据虚拟节点创建真实节点
+
+      var parentElm = oldElm.parentNode; // 拿去旧节点的父节点 body
+
+      parentElm.insertBefore(el, oldElm.nextSibling); // 在旧节点的下一个节点钱插入编译好的真实节点
+
+      parentElm.removeChild(oldElm); // 移除旧的节点 进行模板替换
+
+      return el; // 将渲染好的真实节点返回
+    }
   }
+
+  function createElm(vnode) {
+    var tagName = vnode.tagName;
+        vnode.data;
+        vnode.key;
+        var children = vnode.children,
+        text = vnode.text;
+
+    if (tagName) {
+      // 如果是元素节点
+      vnode.el = document.createElement(tagName); // 创建元素节点
+
+      updateProps(vnode); // 更新当前节点的属性
+
+      if (children && children.length > 0) {
+        // 判断当前节点是否有子节点
+        children.forEach(function (child) {
+          // 遍历子节点
+          return vnode.el.appendChild(createElm(child)); //将子节点添加到父节点上
+        });
+      }
+    } else {
+      // 如果是文本节点
+      return document.createTextNode(text); // 返回文本节点
+    }
+
+    return vnode.el; // 返回当前编译好的当前元素节点 用于添加子节点 最后将编译好的根节点返回
+  }
+
+  function updateProps(vnode) {
+    // 更新当前节点的属性
+    var el = vnode.el; // 拿去当前真实节点
+
+    var attrs = vnode.data; // 拿去当前节点的属性
+
+    for (var key in attrs) {
+      // 遍历属性
+      if (Object.hasOwnProperty.call(attrs, key)) {
+        if (key === 'style') {
+          // 如果当前属性key为style
+          // const attr = attrs[key]
+          // let str = ``
+          // Object.entries(attr).forEach(item => {
+          //   let [name, value] = item
+          //   str += `${name}:${value}; `
+          // })
+          // el.setAttribute('style', `${str.slice(0, str.length - 1)}`)
+          for (var _key in attrs.style) {
+            // 遍历style对象
+            el.style[_key] = attrs.style[_key]; // 给当前真实节点添加样式
+          }
+        } else if (key === 'class') {
+          // 如果当前key是class 给当前真实节点添加class
+          el.className = attrs["class"];
+        } else {
+          el.setAttribute(key, attrs[key]); // 设置其他属性比如 a:1 <div a="1">
+        }
+      }
+    }
+  } // 首先 判断 旧的虚拟节点是否为元素节点 nodeType
+  // 如果是元素节点代表是真实的dom 需要进行渲染操作
+  // 递归遍历虚拟节点 创建真实节点 在这一过程中将虚拟节点的data属性 挂载到生成真实dom节点的属性上
 
   function lifecycleMixin(Vue) {
     Vue.prototype._update = function (vnode) {
+      // 混入_update更新界面的方法 接收参数（执行render函数后生成的对象）
       var vm = this;
-      patch(vm.$el, vnode); // 需要用虚拟节点创建出真实节点 替换掉 真实的$el
+      vm.$el = patch(vm.$el, vnode); // 需要用虚拟节点创建出真实节点 替换掉 真实的$el
       // 我要通过虚拟节点 渲染出真实的dom
     };
   }
   function mountComponent(vm, el) {
     vm.$options;
-    console.log(el);
     vm.$el = el;
 
     var updateComponent = function updateComponent() {
@@ -586,6 +660,7 @@
 
   function createElementNode(tagName) {
     var data = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+    // 编译节点 最终返回一个对象
     var key = data.key;
 
     if (key) {
@@ -599,10 +674,12 @@
     return vnode(tagName, data, key, children, undefined);
   }
   function createTextNode(text) {
+    // 翻译文本内容
     return vnode(undefined, undefined, undefined, undefined, text);
   }
 
   function vnode(tagName, data, key, children, text) {
+    // 节点名称  节点属性 节点key 子节点  文本内容
     return {
       tagName: tagName,
       data: data,
@@ -614,22 +691,26 @@
 
   function renderMixin(Vue) {
     Vue.prototype._c = function () {
+      // 编译元素节点
       return createElementNode.apply(void 0, arguments);
     };
 
     Vue.prototype._v = function (text) {
+      // 编译文本节点
       return createTextNode(text);
     };
 
     Vue.prototype._s = function (val) {
-      return val === null ? '' : _typeof(val) === 'object' ? JSON.stringify(val) : val;
+      // 编译插值语法 
+      return val === null ? '' : _typeof(val) === 'object' ? JSON.stringify(val) : val; // 如果取到当前值是对象 需要stringify转化
     };
 
     Vue.prototype._render = function () {
-      var render = this.$options.render;
-      return render.call(this);
+      var render = this.$options.render; // 拿到配置对象中的render方法 
+
+      return render.call(this); // 调用 render方法 this指向当前实例  返回执行render函数后 产生的一个对象
     };
-  }
+  } //  _c('div',{id:"app",class:"warp",style:{"font-size":" 16px","color":"red"}},_c('span',undefined,_v("hello"+_s(name)+"word")),_c('ul',undefined,_c('li',undefined,_v(_s(person.name))),_c('li',undefined,_v(_s(person.age)))))}
 
   function Vue(options) {
     // options 用户传入的选项
@@ -639,7 +720,8 @@
 
   initMixin(Vue); // 给Vue的原型添加_init的方法，传入Vue
 
-  renderMixin(Vue);
+  renderMixin(Vue); // 给Vue原型添加_c _v _s _render 方法
+
   lifecycleMixin(Vue);
 
   return Vue;
