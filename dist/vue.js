@@ -631,7 +631,13 @@
     }]);
 
     return Watcher;
-  }();
+  }(); // watcher 和 dep
+  // 我们将更新界面的功能封装了一个渲染watcher
+  // 渲染页面前，会将watcher放到Dep的类上  Dep.target = watcher
+  // 在vue中页面渲染时使用属性，需要进行依赖收集，收集对象的渲染watcher
+  // 取值时给每个属性都加了一个dep实例，用于存储渲染watcher（同一个watcher可能存有多个dep）
+  // 每个属性可能对应多个视图（多个视图就对应多个watcher） 一个属性对应多个watcher
+  // dep.depend() => 通知dep存放watcher  Dep.target.addDep () => 通知watcher存放dep
 
   function patch(oldElm, vnode) {
     var isRealDom = oldElm.nodeType;
