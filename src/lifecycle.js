@@ -1,18 +1,21 @@
 
 import { Watcher } from "./observer/watcher";
 import { patch } from "./vdom/patch";
-export function lifecycleMixin(Vue) {  
+import { nextTick } from './next-tick'
+export function lifecycleMixin(Vue) {
   Vue.prototype._update = function (vnode) { // 混入_update更新界面的方法 接收参数（执行render函数后生成的对象）
-      let vm = this
-      vm.$el =  patch(vm.$el,vnode); // 需要用虚拟节点创建出真实节点 替换掉 真实的$el
-      // 我要通过虚拟节点 渲染出真实的dom
+    let vm = this
+    vm.$el = patch(vm.$el, vnode); // 需要用虚拟节点创建出真实节点 替换掉 真实的$el
+    // 我要通过虚拟节点 渲染出真实的dom
 
-      
-  }
+
+  },
+
+    Vue.prototype.$nextTick = nextTick
 }
 
 // 后续可能还会调用此函数 数据刷新更新界面
-export function mountComponent(vm,el) {
+export function mountComponent(vm, el) {
   const options = vm.$options
   vm.$el = el
   let updateComponent = () => {
@@ -20,9 +23,9 @@ export function mountComponent(vm,el) {
   }
 
   // updateComponent()
- new Watcher(vm,updateComponent,() => {
-   console.log('更新界面');
- },true)
+  new Watcher(vm, updateComponent, () => {
+    console.log('更新界面');
+  }, true)
 
 }
 

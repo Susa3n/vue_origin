@@ -10,8 +10,8 @@
 <body>
   <!-- _c('div'),{id:'app',class:'warp'},_v -->
   <div id="app" class='warp' bind="zzz" style="font-size:16px;color:red">
-    <span>hello {{name}}  word</span>
-    <ul >
+    <span>hello {{name}} word</span>
+    <ul>
       <li>{{person.name}}</li>
       <li>{{person.age}}</li>
       <li>{{a}}</li>
@@ -38,6 +38,14 @@
       vm.name = 'susa2n'
       vm.name = 'susa3n'
       vm.name = 'susa4n'
+
+      // setTimeout(() => {
+      //   console.log(vm.$el);
+      // }, 0);
+
+      vm.$nextTick(() => {
+        console.log(vm.$el);
+      })
     }, 1000);
 
 

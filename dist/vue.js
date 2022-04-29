@@ -574,6 +574,88 @@
   //   console.log(name);
   // }
 
+  var callbacks = [];
+  var waiting = false;
+
+  function flushCallbacks() {
+    callbacks.forEach(function (cb) {
+      return cb();
+    });
+    waiting = false;
+    callbacks = [];
+  }
+
+  function timerFn() {
+    var timer = null;
+
+    if (Promise) {
+      // 
+      timer = function timer() {
+        Promise.resolve().then(function () {
+          flushCallbacks();
+        });
+      };
+    } else if (MutationObserver) {
+      var textNode = document.createTextNode(1);
+      var observe = new MutationObserver(flushCallbacks);
+      observe.observe(textNode, {
+        characterData: true
+      });
+
+      timer = function timer() {
+        textNode.textContent = 3;
+      };
+    } else {
+      timer = setTimeout(flushCallbacks);
+    }
+
+    timer();
+  }
+
+  function nextTick(cb) {
+    // 接收一个回调函数
+    callbacks.push(cb); // push到callbacks中
+
+    if (!waiting) {
+      // 异步执行一次 
+      timerFn();
+      waiting = true;
+    }
+  }
+
+  var queue = [];
+  var has = {};
+  var pending = false;
+
+  function flushSchedulerQueue() {
+    queue.forEach(function (watcher) {
+      // 从queue遍历所有的watcher 进行更新
+      watcher.run();
+      queue = []; // 让下一次可以继续使用 清空数据
+
+      has = {};
+    });
+  }
+
+  function queueWatcher(watcher) {
+    var id = watcher.id; // 拿取watcher的id
+
+    if (has[id] == null) {
+      // 判断当前watcher是否在has对象中
+      queue.push(watcher); // 将当前watcher push 到对列中
+
+      has[id] = true; // has中保存watcher的id置为true
+
+      if (!pending) {
+        // 默认false 之后置为true 只让更新操作改为异步的，执行nexttick
+        // setTimeout(flushSchedulerQueue,0);
+        nextTick(flushSchedulerQueue); // 执行异步更新视图的方法
+
+        pending = true;
+      }
+    }
+  }
+
   var id = 0;
   var Watcher = /*#__PURE__*/function () {
     /**
@@ -624,9 +706,16 @@
     }, {
       key: "update",
       value: function update() {
-        // 当前观察者执行对应操作 
+        // 当前观察者执行对应操作
+        // this.get()
+        // 如果数据改变通知对应watcher进行update，当多次更改数据时，会导致多次渲染页面，可以将渲染界面改为异步
+        // 通过queueWatcher收集watcher，之后进行异步更新
+        queueWatcher(this);
+      }
+    }, {
+      key: "run",
+      value: function run() {
         this.get();
-        this.cb();
       }
     }]);
 
@@ -723,7 +812,7 @@
       var vm = this;
       vm.$el = patch(vm.$el, vnode); // 需要用虚拟节点创建出真实节点 替换掉 真实的$el
       // 我要通过虚拟节点 渲染出真实的dom
-    };
+    }, Vue.prototype.$nextTick = nextTick;
   } // 后续可能还会调用此函数 数据刷新更新界面
 
   function mountComponent(vm, el) {
