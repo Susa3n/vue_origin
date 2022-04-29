@@ -14,6 +14,7 @@
     <ul >
       <li>{{person.name}}</li>
       <li>{{person.age}}</li>
+      <li>{{a}}</li>
     </ul>
   </div>
   <script src="./dist/vue.js"></script>
@@ -31,9 +32,23 @@
         }
       }
     })
+
     setTimeout(() => {
-      vm.a.splice(1, 0, [{ name: 'b' }])
+      vm.name = 'susa1n'
+      vm.name = 'susa2n'
+      vm.name = 'susa3n'
+      vm.name = 'susa4n'
     }, 1000);
+
+
+
+    // setTimeout(() => {
+    //   vm.a.splice(1, 0, [{ name: 'b' }])
+    //   vm._update(vm._render())
+    // }, 1000);
+
+    // 需要将数据和页面进行关联起来，数据发生变化自动进行更新视图，调用渲染函数 mountComponent
+    // 创建观察者模式，属性是“被观察者” 渲染函数是“观察者”，当被观察者发生改变，观察者执行对应操作
   </script>
 </body>
 

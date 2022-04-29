@@ -142,6 +142,45 @@
     };
   });
 
+  var id$1 = 0;
+  var Dep = /*#__PURE__*/function () {
+    function Dep() {
+      _classCallCheck(this, Dep);
+
+      this.id = id$1++;
+      this.sub = [];
+    }
+
+    _createClass(Dep, [{
+      key: "append",
+      value: function append() {
+        Dep.target.append(this); // dep添加watcher
+      }
+    }, {
+      key: "addSub",
+      value: function addSub(watcher) {
+        // 反之 watcher添加dep
+        this.sub.push(watcher);
+      }
+    }, {
+      key: "notify",
+      value: function notify() {
+        this.sub.forEach(function (watcher) {
+          return watcher.update();
+        }); // 将当前dep中收集到的watcher进行更新
+      }
+    }]);
+
+    return Dep;
+  }();
+  Dep.target = null;
+  function pushTarget(watcher) {
+    Dep.target = watcher;
+  }
+  function popTarget() {
+    Dep.target = null;
+  }
+
   // 如果是数组 会劫持数组的方法 并对数组上不是基本数据类型的数据进行数据劫持
 
   var Observer = /*#__PURE__*/function () {
@@ -194,16 +233,27 @@
 
   function defineReactive(data, key, value) {
     // 将数据定义为响应式
+    var dep = new Dep(); // 数据劫持时给数据绑定对应的dep
+
     observe(value); // value可能还是对象  递归进行劫持
 
     Object.defineProperty(data, key, {
       get: function get() {
+        // 在watcher中读取对应数据 会判断Dep.target是否是watcher
+        if (Dep.target) {
+          // 如果是
+          dep.append(); // 将当前dep（也就是当前数据）进行关联
+        }
+
         return value;
       },
       set: function set(newValue) {
         // 如果set的newValue是一个对象 也要对对象进行劫持
-        observe(newValue);
-        value = newValue;
+        if (newValue != value) {
+          observe(newValue);
+          value = newValue;
+          dep.notify(); // 通知对应观察者执行操作
+        }
       }
     });
   }
@@ -232,7 +282,7 @@
    *  observe最开始观测data时，最外层是对象形式，遍历所有的key，进行数据劫持，
    * 将当前实例挂载到数组上__ob__ = this，当发现第二层值为数组时，调用observerArray方法，传入当前值，遍历数组进行递归劫持。
    * vm.person.push({name:'lisi'}) 执行旧数组原型上的方法 对新增的数据 通过__ob__.observerArray(args)
-   * 
+   *
    */
 
   function initState(vm) {
@@ -524,6 +574,65 @@
   //   console.log(name);
   // }
 
+  var id = 0;
+  var Watcher = /*#__PURE__*/function () {
+    /**
+     *  Watcher是一个类，生成一个观察者
+     * @param {*} vm 被观测的对象或者数据
+     * @param {*} exprOrFn  被观测的对象发生变化执行对应操作（渲染watcher是函数，在computed或者watch中是表达式）
+     * @param {*} cb 执行完对应操作后的回调函数
+     * @param {*} options 配置对象
+     */
+    function Watcher(vm, exprOrFn, cb, options) {
+      _classCallCheck(this, Watcher);
+
+      // 将传入的参数保存到实例本身
+      this.vm = vm;
+      this.cb = cb;
+      this.options = options;
+      this.getter = exprOrFn; // 挂载到实例的getter属性上，当被观测的数据发生变化 执行this.get
+
+      this.id = id++;
+      this.deps = [];
+      this.depIds = new Set();
+      this.get(); // 默认第一次执行
+    }
+
+    _createClass(Watcher, [{
+      key: "get",
+      value: function get() {
+        // 利用JS的单线程
+        pushTarget(this); // 开始：将watcher（页面）和dep（数据） 进行关联起来
+
+        this.getter(); // 读取对应数据
+
+        popTarget();
+      }
+    }, {
+      key: "append",
+      value: function append(dep) {
+        // 接收dep
+        if (!this.depIds.has(dep.id)) {
+          // 判断当前watcher中depIds中是否有当前dep
+          this.depIds.add(dep.id); // 将接收的dep的id set到当前watcher实例depIds
+
+          this.deps.push(dep); // 将dep保存到watcher的deps中
+
+          dep.addSub(this); // 反之将watcher关联到dep中
+        }
+      }
+    }, {
+      key: "update",
+      value: function update() {
+        // 当前观察者执行对应操作 
+        this.get();
+        this.cb();
+      }
+    }]);
+
+    return Watcher;
+  }();
+
   function patch(oldElm, vnode) {
     var isRealDom = oldElm.nodeType;
 
@@ -609,17 +718,28 @@
       vm.$el = patch(vm.$el, vnode); // 需要用虚拟节点创建出真实节点 替换掉 真实的$el
       // 我要通过虚拟节点 渲染出真实的dom
     };
-  }
+  } // 后续可能还会调用此函数 数据刷新更新界面
+
   function mountComponent(vm, el) {
     vm.$options;
     vm.$el = el;
 
     var updateComponent = function updateComponent() {
       vm._update(vm._render());
-    };
+    }; // updateComponent()
 
-    updateComponent();
-  }
+
+    new Watcher(vm, updateComponent, function () {
+      console.log('更新界面');
+    }, true);
+  } //  在数据劫持的过程中所有的数据绑定对应dep 
+  // 需要将数据和页面进行关联起来，数据发生变化自动进行更新视图，调用渲染函数 mountComponent
+  // 创建观察者模式，属性是“被观察者” 渲染函数是“观察者”，当被观察者发生改变，观察者执行对应操作
+  // Watcher 创建一个类的实例  是观察者
+  // 参数1：传入被观测的数据，
+  // 参数2：被观察者发生变化后执行观察者的操作
+  // 参数3：用户自定义的回调函数，执行完观察者的操作后悔调用回调函数
+  // 参数4：配置参数，如果是渲染watcher 配置参数默认为true
 
   function initMixin(Vue) {
     Vue.prototype._init = function (options) {
