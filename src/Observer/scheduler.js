@@ -9,6 +9,7 @@ function flushSchedulerQueue() {
     watcher.run()
     queue = []; // 让下一次可以继续使用 清空数据
     has = {};
+    pending = false
   })
 }
 

@@ -309,6 +309,183 @@
    *
    */
 
+  var callbacks = [];
+  var waiting = false;
+
+  function flushCallbacks() {
+    callbacks.forEach(function (cb) {
+      return cb();
+    });
+    waiting = false;
+    callbacks = [];
+  }
+
+  function timerFn() {
+    var timer = null;
+
+    if (Promise) {
+      // 
+      timer = function timer() {
+        Promise.resolve().then(function () {
+          flushCallbacks();
+        });
+      };
+    } else if (MutationObserver) {
+      var textNode = document.createTextNode(1);
+      var observe = new MutationObserver(flushCallbacks);
+      observe.observe(textNode, {
+        characterData: true
+      });
+
+      timer = function timer() {
+        textNode.textContent = 3;
+      };
+    } else {
+      timer = setTimeout(flushCallbacks);
+    }
+
+    timer();
+  }
+
+  function nextTick(cb) {
+    // 接收一个回调函数
+    callbacks.push(cb); // push到callbacks中
+
+    if (!waiting) {
+      // 异步执行一次 
+      timerFn();
+      waiting = true;
+    }
+  }
+
+  var queue = [];
+  var has = {};
+  var pending = false;
+
+  function flushSchedulerQueue() {
+    queue.forEach(function (watcher) {
+      // 从queue遍历所有的watcher 进行更新
+      watcher.run();
+      queue = []; // 让下一次可以继续使用 清空数据
+
+      has = {};
+      pending = false;
+    });
+  }
+
+  function queueWatcher(watcher) {
+    var id = watcher.id; // 拿取watcher的id
+
+    if (has[id] == null) {
+      // 判断当前watcher是否在has对象中
+      queue.push(watcher); // 将当前watcher push 到对列中
+
+      has[id] = true; // has中保存watcher的id置为true
+
+      if (!pending) {
+        // 默认false 之后置为true 只让更新操作改为异步的，执行nexttick
+        // setTimeout(flushSchedulerQueue,0);
+        nextTick(flushSchedulerQueue); // 执行异步更新视图的方法
+
+        pending = true;
+      }
+    }
+  }
+
+  var id = 0;
+  var Watcher = /*#__PURE__*/function () {
+    /**
+     *  Watcher是一个类，生成一个观察者
+     * @param {*} vm 被观测的对象或者数据
+     * @param {*} exprOrFn  被观测的对象发生变化执行对应操作（渲染watcher是函数，在computed或者watch中是表达式）
+     * @param {*} cb 执行完对应操作后的回调函数
+     * @param {*} options 配置对象
+     */
+    function Watcher(vm, exprOrFn, cb, options) {
+      _classCallCheck(this, Watcher);
+
+      // 将传入的参数保存到实例本身
+      this.vm = vm;
+      this.cb = cb; // 保存回调函数
+
+      this.options = options;
+      this.user = options.user; // 用户watch
+
+      if (typeof exprOrFn == 'string') {
+        // 如果是用户watch exprOrFn是一个表达式 'name' 'person.nam'
+        this.getter = function () {
+          // getter为一个函数，通过表达式的取值 将watcher 和 表达式的dep进行关联
+          var obj = vm;
+          exprOrFn.split('.').forEach(function (i) {
+            obj = obj[i];
+          });
+          return obj;
+        };
+      } else {
+        this.getter = exprOrFn; // 挂载到实例的getter属性上，当被观测的数据发生变化 执行this.get
+      }
+
+      this.id = id++;
+      this.deps = [];
+      this.depIds = new Set();
+      this.value = this.get(); // 默认第一次执行 拿到watcher的值 保存到实例上，以便用户watcher发生变化执行callback传入对应新值和旧值
+    }
+
+    _createClass(Watcher, [{
+      key: "get",
+      value: function get() {
+        // 利用JS的单线程
+        pushTarget(this); // 开始：将watcher（页面）和dep（数据） 进行关联起来
+
+        var value = this.getter(); // 读取对应数据 
+
+        popTarget();
+        return value;
+      }
+    }, {
+      key: "append",
+      value: function append(dep) {
+        // 接收dep
+        if (!this.depIds.has(dep.id)) {
+          // 判断当前watcher中depIds中是否有当前dep
+          this.depIds.add(dep.id); // 将接收的dep的id set到当前watcher实例depIds
+
+          this.deps.push(dep); // 将dep保存到watcher的deps中
+
+          dep.addSub(this); // 反之将watcher关联到dep中
+        }
+      }
+    }, {
+      key: "update",
+      value: function update() {
+        // 当前观察者执行对应操作
+        // this.get()
+        // 如果数据改变通知对应watcher进行update，当多次更改数据时，会导致多次渲染页面，可以将渲染界面改为异步
+        // 通过queueWatcher收集watcher，之后进行异步更新
+        queueWatcher(this);
+      }
+    }, {
+      key: "run",
+      value: function run() {
+        var oldValue = this.value; // 当监听的值发生变化保存旧值在当前作用域
+
+        var newValue = this.value = this.get(); // 保存新值到实例上 用于下次更新
+
+        if (this.user) {
+          this.cb.call(this.vm, newValue, oldValue); // 如果是用户watcher 执行回调函数 传入参数
+        }
+      }
+    }]);
+
+    return Watcher;
+  }(); // watcher 和 dep
+  // 我们将更新界面的功能封装了一个渲染watcher
+  // 渲染页面前，会将watcher放到Dep的类上  Dep.target = watcher
+  // 在vue中页面渲染时使用属性，需要进行依赖收集，收集对象的渲染watcher
+  // 取值时给每个属性都加了一个dep实例，用于存储渲染watcher（同一个watcher可能存有多个dep）
+  // 每个属性可能对应多个视图（多个视图就对应多个watcher） 一个属性对应多个watcher
+  // dep.depend() => 通知dep存放watcher  Dep.target.addDep () => 通知watcher存放dep
+
   function initState(vm) {
     var opts = vm.$options;
 
@@ -318,10 +495,11 @@
     } // if(opts.computed){
     //   initComputed()
     // }
-    // if(opts.watch){
-    //   initWatch()
-    // }
 
+
+    if (opts.watch) {
+      initWatch(vm, opts.watch);
+    }
   }
 
   function initData(vm) {
@@ -341,6 +519,38 @@
     observe(data);
   }
 
+  function initWatch(vm, watch) {
+    var _loop = function _loop(key) {
+      // 遍历watch
+      var handler = watch[key];
+
+      if (Array.isArray(handler)) {
+        // 判断value的类型，如果是数组类型 需要创建多个用户watch
+        handler.forEach(function (handlerFn) {
+          createWatch(vm, key, handlerFn);
+        });
+      } else {
+        if (_typeof(handler) === 'object') {
+          // 如果是对象类型 取出handler函数，收集配置对象，创建用户watch
+          createWatch(vm, key, handler.handler, handler);
+        } else {
+          createWatch(vm, key, handler); // 如果是函数 直接创建用户watchr
+        }
+      }
+    };
+
+    // 初始化watch方法
+    for (var key in watch) {
+      _loop(key);
+    }
+  }
+
+  function createWatch(vm, key, handler) {
+    var options = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : {};
+    return vm.$watch(key, handler, options); // 通过$watch进行中转
+  } // 数据代理
+
+
   function proxy(vm, source, key) {
     Object.defineProperty(vm, key, {
       get: function get() {
@@ -350,6 +560,19 @@
         vm[source][key] = newValue;
       }
     });
+  }
+
+  function stateMixin(Vue) {
+    Vue.prototype.$watch = function (key, handler, options) {
+      // 在Vue的原型上混入$watch的方法 创建用户监听
+      options.user = true; // 配置对象 用户watch为true
+
+      var userWatcher = new Watcher(this, key, handler, options); // 生产watch实例传入 当前vm，表达式，callback，配置对象
+
+      if (options.immediate) {
+        handler(userWatcher.value);
+      }
+    };
   }
 
   var ncname = "[a-zA-Z_][\\-\\.0-9_a-zA-Z]*"; // abc-aaa
@@ -598,160 +821,6 @@
   //   console.log(name);
   // }
 
-  var callbacks = [];
-  var waiting = false;
-
-  function flushCallbacks() {
-    callbacks.forEach(function (cb) {
-      return cb();
-    });
-    waiting = false;
-    callbacks = [];
-  }
-
-  function timerFn() {
-    var timer = null;
-
-    if (Promise) {
-      // 
-      timer = function timer() {
-        Promise.resolve().then(function () {
-          flushCallbacks();
-        });
-      };
-    } else if (MutationObserver) {
-      var textNode = document.createTextNode(1);
-      var observe = new MutationObserver(flushCallbacks);
-      observe.observe(textNode, {
-        characterData: true
-      });
-
-      timer = function timer() {
-        textNode.textContent = 3;
-      };
-    } else {
-      timer = setTimeout(flushCallbacks);
-    }
-
-    timer();
-  }
-
-  function nextTick(cb) {
-    // 接收一个回调函数
-    callbacks.push(cb); // push到callbacks中
-
-    if (!waiting) {
-      // 异步执行一次 
-      timerFn();
-      waiting = true;
-    }
-  }
-
-  var queue = [];
-  var has = {};
-  var pending = false;
-
-  function flushSchedulerQueue() {
-    queue.forEach(function (watcher) {
-      // 从queue遍历所有的watcher 进行更新
-      watcher.run();
-      queue = []; // 让下一次可以继续使用 清空数据
-
-      has = {};
-    });
-  }
-
-  function queueWatcher(watcher) {
-    var id = watcher.id; // 拿取watcher的id
-
-    if (has[id] == null) {
-      // 判断当前watcher是否在has对象中
-      queue.push(watcher); // 将当前watcher push 到对列中
-
-      has[id] = true; // has中保存watcher的id置为true
-
-      if (!pending) {
-        // 默认false 之后置为true 只让更新操作改为异步的，执行nexttick
-        // setTimeout(flushSchedulerQueue,0);
-        nextTick(flushSchedulerQueue); // 执行异步更新视图的方法
-
-        pending = true;
-      }
-    }
-  }
-
-  var id = 0;
-  var Watcher = /*#__PURE__*/function () {
-    /**
-     *  Watcher是一个类，生成一个观察者
-     * @param {*} vm 被观测的对象或者数据
-     * @param {*} exprOrFn  被观测的对象发生变化执行对应操作（渲染watcher是函数，在computed或者watch中是表达式）
-     * @param {*} cb 执行完对应操作后的回调函数
-     * @param {*} options 配置对象
-     */
-    function Watcher(vm, exprOrFn, cb, options) {
-      _classCallCheck(this, Watcher);
-
-      // 将传入的参数保存到实例本身
-      this.vm = vm;
-      this.cb = cb;
-      this.options = options;
-      this.getter = exprOrFn; // 挂载到实例的getter属性上，当被观测的数据发生变化 执行this.get
-
-      this.id = id++;
-      this.deps = [];
-      this.depIds = new Set();
-      this.get(); // 默认第一次执行
-    }
-
-    _createClass(Watcher, [{
-      key: "get",
-      value: function get() {
-        // 利用JS的单线程
-        pushTarget(this); // 开始：将watcher（页面）和dep（数据） 进行关联起来
-
-        this.getter(); // 读取对应数据
-
-        popTarget();
-      }
-    }, {
-      key: "append",
-      value: function append(dep) {
-        // 接收dep
-        if (!this.depIds.has(dep.id)) {
-          // 判断当前watcher中depIds中是否有当前dep
-          this.depIds.add(dep.id); // 将接收的dep的id set到当前watcher实例depIds
-
-          this.deps.push(dep); // 将dep保存到watcher的deps中
-
-          dep.addSub(this); // 反之将watcher关联到dep中
-        }
-      }
-    }, {
-      key: "update",
-      value: function update() {
-        // 当前观察者执行对应操作
-        // this.get()
-        // 如果数据改变通知对应watcher进行update，当多次更改数据时，会导致多次渲染页面，可以将渲染界面改为异步
-        // 通过queueWatcher收集watcher，之后进行异步更新
-        queueWatcher(this);
-      }
-    }, {
-      key: "run",
-      value: function run() {
-        this.get();
-      }
-    }]);
-
-    return Watcher;
-  }(); // watcher 和 dep
-  // 我们将更新界面的功能封装了一个渲染watcher
-  // 渲染页面前，会将watcher放到Dep的类上  Dep.target = watcher
-  // 在vue中页面渲染时使用属性，需要进行依赖收集，收集对象的渲染watcher
-  // 取值时给每个属性都加了一个dep实例，用于存储渲染watcher（同一个watcher可能存有多个dep）
-  // 每个属性可能对应多个视图（多个视图就对应多个watcher） 一个属性对应多个watcher
-  // dep.depend() => 通知dep存放watcher  Dep.target.addDep () => 通知watcher存放dep
-
   function patch(oldElm, vnode) {
     var isRealDom = oldElm.nodeType;
 
@@ -961,6 +1030,7 @@
 
   renderMixin(Vue); // 给Vue原型添加_c _v _s _render 方法
 
+  stateMixin(Vue);
   lifecycleMixin(Vue);
 
   return Vue;

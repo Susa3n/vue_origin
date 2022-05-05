@@ -31,17 +31,26 @@
           a: [{ name: 'a' }],
           b:[[[1,2,3,4]]]
         }
+      },
+      watch: {
+        'person.name' :{
+          handler(newValue,oldValue) {
+            console.log(newValue,oldValue);
+          },
+          immediate: true
+        },
+        name: [function(a,b) {
+          console.log(a,b);
+        }]
       }
     })
 
-    setTimeout(() => {
-      vm.b[0][0].push(5)
-      console.log(vm.b);
-
-      vm.$nextTick(() => {
-        console.log(vm.$el);
-      })
-    }, 1000);
+    // setTimeout(() => {
+    //  vm.person.name = '1111111'
+    // }, 1000);
+    // setTimeout(() => {
+    //  vm.person.name = '2222222'
+    // }, 2000);
 
 
 
