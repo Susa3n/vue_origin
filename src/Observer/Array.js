@@ -28,5 +28,6 @@ methods.forEach(method => {
         break;
     }
     if (inserted) ob.observerArray(inserted) // 通过observerArray递归进行数据劫持
+    ob.dep.notify() //如果数据发生变化  通过dep通知对应的watcher进行关联
   }
 })

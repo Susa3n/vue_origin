@@ -14,7 +14,7 @@
     <ul>
       <li>{{person.name}}</li>
       <li>{{person.age}}</li>
-      <li>{{a}}</li>
+      <li>{{b}}</li>
     </ul>
   </div>
   <script src="./dist/vue.js"></script>
@@ -28,20 +28,15 @@
             name: 'susa3n',
             age: 18
           },
-          a: [{ name: 'a' }]
+          a: [{ name: 'a' }],
+          b:[[[1,2,3,4]]]
         }
       }
     })
 
     setTimeout(() => {
-      vm.name = 'susa1n'
-      vm.name = 'susa2n'
-      vm.name = 'susa3n'
-      vm.name = 'susa4n'
-
-      // setTimeout(() => {
-      //   console.log(vm.$el);
-      // }, 0);
+      vm.b[0][0].push(5)
+      console.log(vm.b);
 
       vm.$nextTick(() => {
         console.log(vm.$el);

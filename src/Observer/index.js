@@ -13,6 +13,7 @@ class Observer {
     // 二：调用数组的方法（push、shift、splice...）对于新增的数据，可以通过this.__ob__.observerArray递归劫持
     // data.__ob__ = this   如果直接放到data的属性上，当walk(data)时会遍历__ob__上的属性，导致递归爆栈
     // 解决方法： 通过 Object.defineProperty 设置不可枚举
+    this.dep = new Dep()
     Object.defineProperty(data, '__ob__', {
       value: this,
       enumerable: false // 不可枚举
@@ -40,13 +41,29 @@ class Observer {
 
 }
 
+function observeArray(value) {
+  if(Array.isArray(value)){ // 是数组类型 进行遍历
+    value.forEach(currentValue => {
+      let ob = observe(currentValue) // 拿去下一层的dep实例 如果有进行下一层关联
+      if(ob){
+        ob.dep.append()
+      } 
+      observeArray(currentValue) // 递归关联
+    })
+  }
+}
+
 function defineReactive(data, key, value) { // 将数据定义为响应式
   let dep = new Dep() // 数据劫持时给数据绑定对应的dep
-  observe(value) // value可能还是对象  递归进行劫持
+  let childOb = observe(value) // value可能还是对象  递归进行劫持,value是数组或value时，为了将value的dep的和视图watcher进行关联，此时childOb是数组或对象的dep实例
   Object.defineProperty(data, key, {
     get() { // 在watcher中读取对应数据 会判断Dep.target是否是watcher
       if(Dep.target) { // 如果是
         dep.append() // 将当前dep（也就是当前数据）进行关联
+        if(childOb) { // 如果有值 数组去关联视图watcher
+          childOb.dep.append()
+          observeArray(value) // 递归将下一层的数据进行关联watcher  [[[1,2,3]]]
+        }
       }
       return value
     },
@@ -69,7 +86,7 @@ export function observe(data) { // 观测数据
   }
 
   if (data.__ob__) {
-    return
+    return data.__ob__
   }
 
   // data最外层默认是对象

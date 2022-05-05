@@ -39,8 +39,6 @@ export class Watcher {
 
   update() { // 当前观察者执行对应操作
     // this.get()
-
-
     // 如果数据改变通知对应watcher进行update，当多次更改数据时，会导致多次渲染页面，可以将渲染界面改为异步
     // 通过queueWatcher收集watcher，之后进行异步更新
     queueWatcher(this) 
