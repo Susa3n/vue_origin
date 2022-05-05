@@ -15,26 +15,28 @@ export class Watcher {
     this.cb = cb // 保存回调函数
     this.options = options
     this.user = options.user // 用户watch
-    if(typeof exprOrFn == 'string') { // 如果是用户watch exprOrFn是一个表达式 'name' 'person.nam'
-      this.getter = function() {  // getter为一个函数，通过表达式的取值 将watcher 和 表达式的dep进行关联
-        let obj = vm 
+    this.lazy = !!options.lazy // 计算属性watch 初次不加载
+    this.dirty = options.lazy // 计算属性watch 默认是脏的 
+    if (typeof exprOrFn == 'string') { // 如果是用户watch exprOrFn是一个表达式 'name' 'person.nam'
+      this.getter = function () {  // getter为一个函数，通过表达式的取值 将watcher 和 表达式的dep进行关联
+        let obj = vm
         exprOrFn.split('.').forEach(i => {
           obj = obj[i]
         })
         return obj
       }
-    }else {
+    } else {
       this.getter = exprOrFn // 挂载到实例的getter属性上，当被观测的数据发生变化 执行this.get
     }
     this.id = id++
     this.deps = []
     this.depIds = new Set()
-    this.value = this.get() // 默认第一次执行 拿到watcher的值 保存到实例上，以便用户watcher发生变化执行callback传入对应新值和旧值
+    this.value = this.lazy ? undefined : this.get() // 默认第一次执行 拿到watcher的值 保存到实例上，以便用户watcher发生变化执行callback传入对应新值和旧值
   }
 
   get() { // 利用JS的单线程
     pushTarget(this) // 开始：将watcher（页面）和dep（数据） 进行关联起来
-    let value = this.getter() // 读取对应数据 
+    let value = this.getter.call(this.vm) // 读取对应数据 
     popTarget()
     return value
   }
@@ -53,17 +55,32 @@ export class Watcher {
     // this.get()
     // 如果数据改变通知对应watcher进行update，当多次更改数据时，会导致多次渲染页面，可以将渲染界面改为异步
     // 通过queueWatcher收集watcher，之后进行异步更新
-    queueWatcher(this) 
+    if(this.lazy) { // 如果当前watcher是计算属性watcher dirty为true是脏的
+      this.dirty = true
+    }else {
+      queueWatcher(this)
+    }
   }
 
   run() {
     let oldValue = this.value // 当监听的值发生变化保存旧值在当前作用域
     let newValue = this.value = this.get() // 保存新值到实例上 用于下次更新
-    if(this.user) {
-      this.cb.call(this.vm,newValue,oldValue) // 如果是用户watcher 执行回调函数 传入参数
+    if (this.user) {
+      this.cb.call(this.vm, newValue, oldValue) // 如果是用户watcher 执行回调函数 传入参数
     }
   }
+  evaluate() {
+      this.value = this.get() // 调用计算属性的getter函数
+      this.dirty = false // 脏值变为不脏的  
+      return this.value // 返回计算属性的值
+  }
 
+  depend() {
+    let i = this.deps.length // 拿去当前计算属性上的dep，拿到每个dep关联渲染watcher
+    while(i--) {
+      this.deps[i].append()
+    }
+  }
 
 }
 

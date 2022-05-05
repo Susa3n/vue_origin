@@ -10,12 +10,7 @@
 <body>
   <!-- _c('div'),{id:'app',class:'warp'},_v -->
   <div id="app" class='warp' bind="zzz" style="font-size:16px;color:red">
-    <span>hello {{name}} word</span>
-    <ul>
-      <li>{{person.name}}</li>
-      <li>{{person.age}}</li>
-      <li>{{b}}</li>
-    </ul>
+    {{nameAge}}
   </div>
   <script src="./dist/vue.js"></script>
   <script type="text/javascript">
@@ -24,24 +19,28 @@
       data() {
         return {
           name: 'lisi',
-          person: {
-            name: 'susa3n',
-            age: 18
-          },
-          a: [{ name: 'a' }],
-          b:[[[1,2,3,4]]]
+          age: '18',
+        }
+      },
+      computed: {
+        // nameAge: {
+        //   get() {
+        //     return this.name + this.age
+        //   }
+        // }
+        nameAge:function ()  {
+          return this.name + this.age
         }
       },
       watch: {
-        'person.name' :{
-          handler(newValue,oldValue) {
-            console.log(newValue,oldValue);
-          },
-          immediate: true
-        },
-        name: [function(a,b) {
-          console.log(a,b);
-        }]
+        // 'person.name' :{
+        //   handler(newValue,oldValue) {
+        //     console.log(newValue,oldValue,this.a);
+        //   },
+        // },
+        // name: [function(a,b) {
+        //   console.log(a,b);
+        // }]
       }
     })
 
@@ -50,6 +49,19 @@
     // }, 1000);
     // setTimeout(() => {
     //  vm.person.name = '2222222'
+    // }, 2000);
+
+
+
+    // vm.nameAge;
+    // vm.nameAge;
+    // vm.nameAge
+    // setTimeout(() => {
+    //   vm.name = 'susa3n'
+    // }, 1000);
+
+    // setTimeout(() => {
+    //   vm.name = '2222222'
     // }, 2000);
 
 

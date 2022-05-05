@@ -176,11 +176,22 @@
     return Dep;
   }();
   Dep.target = null;
+  var stack$1 = []; // 第一次进来的是渲染watcher  第二次是计算属性watcher 
+  // 计算属性依赖的数据 收集的只有计算属性watcher，渲染watcher没有收集，比如fullName () {return this.firstName + this.lastName}
+  // 此时 this.firstName 和 this.lastName收集的watcher只有计算属性watcher
+  // 通过栈的形式将先保存渲染watcher 之后保存计算属性watcher
+
   function pushTarget(watcher) {
+    stack$1.push(watcher);
     Dep.target = watcher;
-  }
+  } // 当计算属性取过值之后 调用popTarget ，Dep.target = 渲染watcher
+  // 在计算属性evaluate之后通过对应的计算属性watcher，拿到对应的deps
+  // 遍历deps,也就是this.firstName 和 this.lastName的绑定的dep，通过dep再去收集渲染watcher
+  // 这样就达到目的，一个dep收集多个watcher
+
   function popTarget() {
-    Dep.target = null;
+    stack$1.pop();
+    Dep.target = stack$1[stack$1.length - 1];
   }
 
   // 如果是数组 会劫持数组的方法 并对数组上不是基本数据类型的数据进行数据劫持
@@ -411,6 +422,10 @@
       this.options = options;
       this.user = options.user; // 用户watch
 
+      this.lazy = !!options.lazy; // 计算属性watch 初次不加载
+
+      this.dirty = options.lazy; // 计算属性watch 默认是脏的 
+
       if (typeof exprOrFn == 'string') {
         // 如果是用户watch exprOrFn是一个表达式 'name' 'person.nam'
         this.getter = function () {
@@ -428,7 +443,7 @@
       this.id = id++;
       this.deps = [];
       this.depIds = new Set();
-      this.value = this.get(); // 默认第一次执行 拿到watcher的值 保存到实例上，以便用户watcher发生变化执行callback传入对应新值和旧值
+      this.value = this.lazy ? undefined : this.get(); // 默认第一次执行 拿到watcher的值 保存到实例上，以便用户watcher发生变化执行callback传入对应新值和旧值
     }
 
     _createClass(Watcher, [{
@@ -437,7 +452,7 @@
         // 利用JS的单线程
         pushTarget(this); // 开始：将watcher（页面）和dep（数据） 进行关联起来
 
-        var value = this.getter(); // 读取对应数据 
+        var value = this.getter.call(this.vm); // 读取对应数据 
 
         popTarget();
         return value;
@@ -462,7 +477,12 @@
         // this.get()
         // 如果数据改变通知对应watcher进行update，当多次更改数据时，会导致多次渲染页面，可以将渲染界面改为异步
         // 通过queueWatcher收集watcher，之后进行异步更新
-        queueWatcher(this);
+        if (this.lazy) {
+          // 如果当前watcher是计算属性watcher dirty为true是脏的
+          this.dirty = true;
+        } else {
+          queueWatcher(this);
+        }
       }
     }, {
       key: "run",
@@ -473,6 +493,24 @@
 
         if (this.user) {
           this.cb.call(this.vm, newValue, oldValue); // 如果是用户watcher 执行回调函数 传入参数
+        }
+      }
+    }, {
+      key: "evaluate",
+      value: function evaluate() {
+        this.value = this.get(); // 调用计算属性的getter函数
+
+        this.dirty = false; // 脏值变为不脏的  
+
+        return this.value; // 返回计算属性的值
+      }
+    }, {
+      key: "depend",
+      value: function depend() {
+        var i = this.deps.length; // 拿去当前计算属性上的dep，拿到每个dep关联渲染watcher
+
+        while (i--) {
+          this.deps[i].append();
         }
       }
     }]);
@@ -492,10 +530,11 @@
     if (opts.data) {
       // 如果选项中有data
       initData(vm); // 对data进行初始化
-    } // if(opts.computed){
-    //   initComputed()
-    // }
+    }
 
+    if (opts.computed) {
+      initComputed(vm, opts.computed);
+    }
 
     if (opts.watch) {
       initWatch(vm, opts.watch);
@@ -517,6 +556,48 @@
 
 
     observe(data);
+  }
+
+  function initComputed(vm, computed) {
+    var watchers = vm._computedWatchers = {}; // 保存一份计算属性的watchers到vm实例上，以便可以通过key和vm找到对应的计算属性watcher
+
+    for (var key in computed) {
+      // 遍历计算属性
+      var userDef = computed[key];
+      var getter = typeof userDef === 'function' ? userDef : userDef.get; // 判断单个计算属性是函数或者是对象，拿到定义的函数
+
+      watchers[key] = new Watcher(vm, getter, function () {}, {
+        lazy: true
+      }); // 生成计算属性watcher 传入vm  getter 配置对象默认lazy为true 初次不渲染 
+
+      deReactiveComputed(vm, key, userDef); // 将computed属性的key通过Object.defineProperty定义到vm
+    }
+  }
+
+  function createComputedGetter(key) {
+    return function () {
+      var computedWatcher = this._computedWatchers[key]; // 通过vm和key拿到对应的watcher
+
+      if (computedWatcher.dirty) {
+        // 判断当前watcher是否是脏值 dirty:true
+        computedWatcher.evaluate(); // 取值
+      }
+
+      if (Dep.target) {
+        // 取值之后 渲染watcher继续收集计算属性watcher上的dep
+        computedWatcher.depend();
+      }
+
+      return computedWatcher.value; // 将值返回
+    };
+  }
+
+  function deReactiveComputed(vm, key, userDef) {
+    // 定义计算属性的key响应式
+    var shareComputedFn = {};
+    shareComputedFn.get = createComputedGetter(key), // 如果userDef是对象，通过key去找到对应的watcher,再通过watcher调用getter
+    shareComputedFn.set = userDef.set;
+    Object.defineProperty(vm, key, shareComputedFn);
   }
 
   function initWatch(vm, watch) {
@@ -573,7 +654,10 @@
         handler(userWatcher.value);
       }
     };
-  }
+  } // 初始化computed：
+  // 遍历computed 分为两个部分 一个部分创建watcher 另外通过Object.defineProperty定义computed的key
+  // 定义的watcher 默认是脏的，只有脏的才会从新取值（缓存）
+  // 当watcher计算属性依赖数据发生改变 dirty 脏值为true。且依赖数据的dep收集完计算属性的watcher后还要收集渲染watcher，发生改变渲染视图
 
   var ncname = "[a-zA-Z_][\\-\\.0-9_a-zA-Z]*"; // abc-aaa
 
