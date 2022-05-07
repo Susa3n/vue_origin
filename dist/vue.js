@@ -4,6 +4,32 @@
   (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.Vue = factory());
 })(this, (function () { 'use strict';
 
+  function ownKeys(object, enumerableOnly) {
+    var keys = Object.keys(object);
+
+    if (Object.getOwnPropertySymbols) {
+      var symbols = Object.getOwnPropertySymbols(object);
+      enumerableOnly && (symbols = symbols.filter(function (sym) {
+        return Object.getOwnPropertyDescriptor(object, sym).enumerable;
+      })), keys.push.apply(keys, symbols);
+    }
+
+    return keys;
+  }
+
+  function _objectSpread2(target) {
+    for (var i = 1; i < arguments.length; i++) {
+      var source = null != arguments[i] ? arguments[i] : {};
+      i % 2 ? ownKeys(Object(source), !0).forEach(function (key) {
+        _defineProperty(target, key, source[key]);
+      }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)) : ownKeys(Object(source)).forEach(function (key) {
+        Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
+      });
+    }
+
+    return target;
+  }
+
   function _typeof(obj) {
     "@babel/helpers - typeof";
 
@@ -37,6 +63,21 @@
       writable: false
     });
     return Constructor;
+  }
+
+  function _defineProperty(obj, key, value) {
+    if (key in obj) {
+      Object.defineProperty(obj, key, {
+        value: value,
+        enumerable: true,
+        configurable: true,
+        writable: true
+      });
+    } else {
+      obj[key] = value;
+    }
+
+    return obj;
   }
 
   function _slicedToArray(arr, i) {
@@ -103,6 +144,75 @@
   }
   function isObject(value) {
     return _typeof(value) === 'object' && value != null;
+  } // 生命周期策略模式
+
+  var lifecycle = ['beforeCreate', 'created', 'beforeMount', 'mounted', 'beforeUpdate', 'updated', 'beforeDestroy', 'destroyed'];
+  var strategy = {};
+
+  function mergeHook(parentVal, childVal) {
+    if (childVal) {
+      // 第一次parentVal是空对象，拿去childValue
+      if (parentVal) {
+        return parentVal.concat(childVal); // 之后第二次进行合并时parentVal就是第一次合并的[childVal]，进行返回
+      } else {
+        return [childVal]; // 返回[childVal]
+      }
+    } else {
+      return parentVal;
+    }
+  }
+
+  lifecycle.forEach(function (key) {
+    // 遍历生命周期的name在strategy中定义函数用来合并生命周期的方法
+    strategy[key] = mergeHook;
+  });
+  function mergeOptions(parent, child) {
+    var options = {};
+
+    for (var key in parent) {
+      // 遍历parent的key
+      mergeFiled(key);
+    }
+
+    for (var _key in child) {
+      if (parent.hasOwnProperty(_key)) {
+        // 如果child中的key在parent 跳出循环 
+        continue;
+      }
+
+      mergeFiled(_key); // 如果不在 调用mergeFiled => options[key] = childVal
+    }
+
+    function mergeFiled(key) {
+      var parentVal = parent[key]; // 拿去parent的值
+
+      var childVal = child[key];
+
+      if (strategy[key]) {
+        // 如果当前key属于生命周期中字段
+        options[key] = strategy[key](parentVal, childVal); // 合并生命周期
+      } else {
+        if (isObject(parentVal) && isObject(childVal)) {
+          // 如果是对象形式进行简答的合并 
+          options[key] = _objectSpread2(_objectSpread2({}, parentVal), childVal);
+        } else {
+          options[key] = childVal; // 如果父中的key是undefined 直接将子中的childVal返回
+        }
+      }
+    }
+
+    return options;
+  }
+
+  function globalApi(Vue) {
+    Vue.options = {}; // Vue本身有options属性是空对象
+
+    Vue.mixin = function (options) {
+      // mixin混入，在这个方法里合并配置对象
+      this.options = mergeOptions(this.options, options); // 将用户传的options和本身的options进行合并
+
+      return this;
+    };
   }
 
   var oldMethods = Array.prototype;
@@ -1001,6 +1111,7 @@
     }; // updateComponent()
 
 
+    callHook(vm, 'beforeMount');
     new Watcher(vm, updateComponent, function () {
       console.log('更新界面');
     }, true);
@@ -1016,11 +1127,16 @@
   function initMixin(Vue) {
     Vue.prototype._init = function (options) {
       var vm = this; // 缓存this 保存到当前作用域
+      // vm.$options = options  // 将选项保存到实例的$options
 
-      vm.$options = options; // 将选项保存到实例的$options
-      // 对数据进行初始化 比如 data  computed watch ...
+      vm.$options = mergeOptions(vm.constructor.options, options); // 将用户传入的options和实例本身进行合并
+      // 比如使用时在外部调用了Vue.mixin方法全局混入要和实例进行合并
+      // 这里用vm.constructor.options的原因 是因为有可能当前调用_init方法的是继承的形式  Vue.extend
 
-      initState(vm);
+      callHook(vm, 'beforeCreate');
+      initState(vm); // 对数据进行初始化 比如 data  computed watch ...
+
+      callHook(vm, 'created');
 
       if (vm.$options.el) {
         vm.$mount(vm.$options.el); // 挂载界面，如果当前配置项有el属性，传入当前el
@@ -1048,6 +1164,15 @@
 
       mountComponent(vm, el); // 拿到render函数后 渲染界面
     };
+  }
+  function callHook(vm, key) {
+    var handlers = vm.$options[key];
+
+    if (handlers) {
+      handlers.forEach(function (hook) {
+        hook.call(vm);
+      });
+    }
   }
 
   function createElementNode(tagName) {
@@ -1115,6 +1240,8 @@
   renderMixin(Vue); // 给Vue原型添加_c _v _s _render 方法
 
   stateMixin(Vue);
+  globalApi(Vue); // 全局api
+
   lifecycleMixin(Vue);
 
   return Vue;

@@ -23,6 +23,5 @@ export function queueWatcher(watcher) {
       nextTick(flushSchedulerQueue)  // 执行异步更新视图的方法
       pending = true
     }
-
   }
 }

@@ -14,6 +14,20 @@
   </div>
   <script src="./dist/vue.js"></script>
   <script type="text/javascript">
+
+    Vue.mixin({
+      beforeMount() {
+        console.log(this.age);
+      },
+      beforeCreate() {
+        console.log('111111')
+      },
+    })
+    Vue.mixin({
+      beforeCreate() {
+        console.log('2222222')
+      },
+    })
     let vm = new Vue({
       el: '#app',
       data() {
@@ -21,6 +35,9 @@
           name: 'lisi',
           age: '18',
         }
+      },
+      created() {
+        console.log(this.name);
       },
       computed: {
         // nameAge: {

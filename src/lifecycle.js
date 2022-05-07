@@ -2,6 +2,7 @@
 import { Watcher } from "./observer/watcher";
 import { patch } from "./vdom/patch";
 import { nextTick } from './next-tick'
+import { callHook } from "./init";
 export function lifecycleMixin(Vue) {
   Vue.prototype._update = function (vnode) { // 混入_update更新界面的方法 接收参数（执行render函数后生成的对象）
     let vm = this
@@ -22,6 +23,7 @@ export function mountComponent(vm, el) {
   }
 
   // updateComponent()
+  callHook(vm,'beforeMount')
   new Watcher(vm, updateComponent, () => {
     console.log('更新界面');
   }, true)
