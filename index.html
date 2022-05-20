@@ -10,24 +10,18 @@
 <body>
   <!-- _c('div'),{id:'app',class:'warp'},_v -->
   <div id="app" class='warp' bind="zzz" style="font-size:16px;color:red">
-    {{nameAge}}
+    <li>
+      <span>{{name}}</span>
+    </li>
+    <li>
+      <span>{{age}}</span>
+    </li>
+    <li>
+      <span>{{nameAge}}</span>
+    </li>
   </div>
   <script src="./dist/vue.js"></script>
   <script type="text/javascript">
-
-    Vue.mixin({
-      beforeMount() {
-        console.log(this.age);
-      },
-      beforeCreate() {
-        console.log('111111')
-      },
-    })
-    Vue.mixin({
-      beforeCreate() {
-        console.log('2222222')
-      },
-    })
     let vm = new Vue({
       el: '#app',
       data() {
@@ -36,15 +30,7 @@
           age: '18',
         }
       },
-      created() {
-        console.log(this.name);
-      },
       computed: {
-        // nameAge: {
-        //   get() {
-        //     return this.name + this.age
-        //   }
-        // }
         nameAge:function ()  {
           return this.name + this.age
         }
@@ -77,9 +63,13 @@
     //   vm.name = 'susa3n'
     // }, 1000);
 
-    // setTimeout(() => {
-    //   vm.name = '2222222'
-    // }, 2000);
+    setTimeout(() => {
+      vm.name = '2222222'
+    }, 4000);
+
+    setTimeout(() => {
+      vm.name = '11111'
+    }, 8000);
 
 
 

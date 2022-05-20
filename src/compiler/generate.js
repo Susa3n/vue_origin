@@ -6,6 +6,7 @@ function geneProps(attrs) {
   attrs.forEach(attr => { // 遍历当前节点的属性list  {id:'app',class:'classA',style: {font-size: '14px',color:'red'}}
     if(attr.name === 'style') { // 如果当前属性item的name为style {font-size: '14px';color:'red'}
       let obj = {} // 定义空对象
+      // console.log(attr.value);
       attr.value.split(';').forEach(styleItem => {   // 拿到当前value进行split  [font-size: '14px',color:'red']
         let [key,value] = styleItem.split(':') // [key: 'font-size',value: '14px']  [key: 'color',value: 'red']
         obj[key] = `${value}` // obj = {font-size: '14px',color: 'red'}
