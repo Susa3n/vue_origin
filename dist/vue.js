@@ -286,13 +286,13 @@
     return Dep;
   }();
   Dep.target = null;
-  var stack$1 = []; // 第一次进来的是渲染watcher  第二次是计算属性watcher 
+  var stack = []; // 第一次进来的是渲染watcher  第二次是计算属性watcher 
   // 计算属性依赖的数据 收集的只有计算属性watcher，渲染watcher没有收集，比如fullName () {return this.firstName + this.lastName}
   // 此时 this.firstName 和 this.lastName收集的watcher只有计算属性watcher
   // 通过栈的形式将先保存渲染watcher 之后保存计算属性watcher
 
   function pushTarget(watcher) {
-    stack$1.push(watcher);
+    stack.push(watcher);
     Dep.target = watcher;
   } // 当计算属性取过值之后 调用popTarget ，Dep.target = 渲染watcher
   // 在计算属性evaluate之后通过对应的计算属性watcher，拿到对应的deps
@@ -300,8 +300,8 @@
   // 这样就达到目的，一个dep收集多个watcher
 
   function popTarget() {
-    stack$1.pop();
-    Dep.target = stack$1[stack$1.length - 1];
+    stack.pop();
+    Dep.target = stack[stack.length - 1];
   }
 
   // 如果是数组 会劫持数组的方法 并对数组上不是基本数据类型的数据进行数据劫持
@@ -783,9 +783,6 @@
 
   var startTagClose = /^\s*(\/?)>/; // 匹配标签结束的 >  <div>
 
-  var root = null;
-  var currParent;
-  var stack = [];
   var ELEMENT_TYPE = 1; // 标签节点  
 
   var TEXT_TYPE = 3; // 文本节点
@@ -793,6 +790,10 @@
 
   function parserHtml(html) {
     // <div id="app"></app>
+    var root = null;
+    var currParent;
+    var stack = [];
+
     while (html) {
       // 循环解析
       var textEnd = html.indexOf('<'); // 查看是否以<开头
@@ -866,6 +867,40 @@
       html = html.substring(len);
     }
 
+    function start(tagName, tagAttrs) {
+      var element = createElement(tagName, tagAttrs);
+
+      if (!root) {
+        root = element;
+      }
+
+      stack.push(element);
+      currParent = element;
+    }
+
+    function end(tagName) {
+      var currentElement = stack.pop();
+      var parentElement = stack[stack.length - 1];
+
+      if (tagName == currentElement.tag) {
+        if (parentElement) {
+          parentElement.children.push(currentElement);
+          currentElement.parent = parentElement;
+        }
+      }
+    }
+
+    function chars(text) {
+      text = text.replace(/\s/g, '');
+
+      if (text) {
+        currParent.children.push({
+          type: TEXT_TYPE,
+          text: text
+        });
+      }
+    }
+
     return root;
   }
 
@@ -877,40 +912,6 @@
       attrs: attrs,
       parent: null
     };
-  }
-
-  function start(tagName, tagAttrs) {
-    var element = createElement(tagName, tagAttrs);
-
-    if (!root) {
-      root = element;
-    }
-
-    stack.push(element);
-    currParent = element;
-  }
-
-  function end(tagName) {
-    var currentElement = stack.pop();
-    var parentElement = stack[stack.length - 1];
-
-    if (tagName == currentElement.tag) {
-      if (parentElement) {
-        parentElement.children.push(currentElement);
-        currentElement.parent = parentElement;
-      }
-    }
-  }
-
-  function chars(text) {
-    text = text.replace(/\s/g, '');
-
-    if (text) {
-      currParent.children.push({
-        type: TEXT_TYPE,
-        text: text
-      });
-    }
   }
 
   var defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g; // 匹配插值语法
@@ -1016,7 +1017,7 @@
   // }
 
   function patch(oldElm, vnode) {
-    var isRealDom = oldElm.nodeType;
+    var isRealDom = oldElm && oldElm.nodeType;
 
     if (isRealDom) {
       var el = createElm(vnode); // 根据虚拟节点创建真实节点
@@ -1028,9 +1029,50 @@
       parentElm.removeChild(oldElm); // 移除旧的节点 进行模板替换
 
       return el; // 将渲染好的真实节点返回
+    } else {
+      // 对比虚拟节点 替换真实节点
+      if (oldElm.tagName !== vnode.tagName) {
+        // 如果节点的名称不同 找到父节点进行替换
+        oldElm.el.parentNode.replaceChild(createElm(vnode), oldElm.el);
+      }
+
+      if (!oldElm.tagName) {
+        // 如果是文本节点 当前oldElm.tagName为undefined
+        if (oldElm.text !== vnode.text) {
+          // 对比文本内容 如果不同进行赋值
+          oldElm.el.textContent = vnode.text;
+        }
+      }
+
+      var _el = vnode.el = oldElm.el; // 将真实dom赋值给新虚拟节点的el属性
+      // 对比属性  传入新虚拟节点 和 旧节点的属性
+
+
+      updateProps(vnode, oldElm.data); // 对比孩子属性
+
+      var newChildren = vnode.children || [];
+      var oldChildren = oldElm.children || [];
+
+      if (newChildren.length > 0 && oldChildren.length > 0) {
+        // 如果children的长度都大于0
+        patchChildren(_el, newChildren, oldChildren); // 对比孩子节点 传入 （父节点,新虚拟节点list,旧虚拟节点list）
+      } else if (newChildren.length > 0) {
+        // 如果新虚拟节点length大于0 旧虚拟节点length = 0
+        newChildren.forEach(function (i) {
+          // 遍历新虚拟节点 依次添加父节点的子节点
+          _el.appendChild(createElm(i));
+        });
+      } else if (oldChildren.length > 0) {
+        // 如果旧虚拟节点length大于0 新虚拟节点length = 0
+        oldChildren.forEach(function (i) {
+          // // 遍历新虚拟节点 依次从父节点移除子节点
+          _el.removeChild(i.el);
+        });
+      }
+
+      return _el;
     }
   }
-
   function createElm(vnode) {
     var tagName = vnode.tagName;
         vnode.data;
@@ -1053,39 +1095,152 @@
       }
     } else {
       // 如果是文本节点
-      return document.createTextNode(text); // 返回文本节点
+      vnode.el = document.createTextNode(text); // 返回文本节点
     }
 
     return vnode.el; // 返回当前编译好的当前元素节点 用于添加子节点 最后将编译好的根节点返回
   }
 
+  function isSameTag(newChild, oldChild) {
+    return newChild.tagName === oldChild.tagName && newChild.key == oldChild.key;
+  }
+
   function updateProps(vnode) {
+    var oldVnodeData = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
     // 更新当前节点的属性
-    var el = vnode.el; // 拿去当前真实节点
+    var el = vnode.el; // 拿去当前真实dom
 
-    var attrs = vnode.data; // 拿去当前节点的属性
+    var newData = vnode.data || {}; // 拿去当前节点的属性
 
-    for (var key in attrs) {
+    var oldData = oldVnodeData; // 拿去旧节点的属性 默认为空对象
+
+    var newStyle = newData.style || {}; // 拿去当前虚拟节点样式属性
+
+    var oldStyle = oldVnodeData.style || {}; // 拿去旧虚拟节点样式属性
+
+    for (var key in oldStyle) {
+      // 遍历旧样式属性
+      if (!newStyle[key]) {
+        // 如果新样式属性中没有当前key
+        el.style[key] = ""; // 真实dom的style属性的key置为空
+      }
+    }
+
+    for (var _key in oldData) {
+      // 同理遍历旧虚拟节点的属性
+      if (!newData[_key]) {
+        // 如果新虚拟节点的属性没有当前key
+        el.removeAttribute(_key); // 真实dom移除当前属性
+      }
+    }
+
+    for (var _key2 in newData) {
       // 遍历属性
-      if (Object.hasOwnProperty.call(attrs, key)) {
-        if (key === 'style') {
+      if (Object.hasOwnProperty.call(newData, _key2)) {
+        if (_key2 === 'style') {
           // 如果当前属性key为style
-          // const attr = attrs[key]
-          // let str = ``
-          // Object.entries(attr).forEach(item => {
-          //   let [name, value] = item
-          //   str += `${name}:${value}; `
-          // })
-          // el.setAttribute('style', `${str.slice(0, str.length - 1)}`)
-          for (var _key in attrs.style) {
+          for (var _key3 in newData.style) {
             // 遍历style对象
-            el.style[_key] = attrs.style[_key]; // 给当前真实节点添加样式
+            el.style[_key3] = newData.style[_key3]; // 给当前真实节点添加样式
           }
-        } else if (key === 'class') {
+        } else if (_key2 === 'class') {
           // 如果当前key是class 给当前真实节点添加class
-          el.className = attrs["class"];
+          el.className = newData["class"];
         } else {
-          el.setAttribute(key, attrs[key]); // 设置其他属性比如 a:1 <div a="1">
+          el.setAttribute(_key2, newData[_key2]); // 设置其他属性比如 a:1 <div a="1">
+        }
+      }
+    }
+  }
+
+  function makeChildrenMap(children) {
+    var map = {};
+    children.forEach(function (item, index) {
+      if (item.key) {
+        map[item.key] = index;
+      }
+    });
+    return map;
+  } // 双指针对比孩子虚拟节点
+
+
+  function patchChildren(parent, newChildren, oldChildren) {
+    var newStartIndex = 0;
+    var newStartVnode = newChildren[0];
+    var newEndIndex = newChildren.length - 1;
+    var newEndVnode = newChildren[newEndIndex];
+    var oldStartIndex = 0;
+    var oldStartVnode = oldChildren[0];
+    var oldEndIndex = oldChildren.length - 1;
+    var oldEndVnode = oldChildren[oldEndIndex]; // 收集旧虚拟节点的子节点 存在map中{key:index}
+
+    var map = makeChildrenMap(oldChildren);
+
+    while (newStartIndex <= newEndIndex && oldStartIndex <= oldEndIndex) {
+      if (oldStartVnode == null) {
+        //因为暴力对比,匹配到的节点为置为null  所以当遇到节点为null的向下递加向上递减
+        oldStartVnode = oldChildren[++oldStartIndex];
+      } else if (oldEndVnode == null) {
+        oldEndVnode = oldChildren[--oldEndIndex]; // 如果新虚拟节点的开头 和 旧虚拟节点的开头 相同
+      } else if (isSameTag(newStartVnode, oldStartVnode)) {
+        patch(oldStartVnode, newStartVnode); // 对比子节点 
+
+        newStartVnode = newChildren[++newStartIndex];
+        oldStartVnode = oldChildren[++oldStartIndex]; // 如果新虚拟节点的结尾 和 旧虚拟节点的结尾 相同
+      } else if (isSameTag(newEndVnode, oldEndVnode)) {
+        patch(oldEndVnode, newEndVnode);
+        oldEndVnode = oldChildren[--oldEndIndex];
+        newEndVnode = newChildren[--newEndIndex]; // 如果新虚拟节点的结尾 和 旧虚拟节点的开始 相同
+      } else if (isSameTag(newEndVnode, oldStartVnode)) {
+        patch(oldStartVnode, newEndVnode);
+        parent.insertBefore(oldStartVnode.el, oldEndVnode.el.nextSibling);
+        oldStartVnode = oldChildren[++oldStartIndex];
+        newEndVnode = newChildren[--newEndIndex]; // 如果新虚拟节点的开始 和 旧虚拟节点的结尾 相同
+      } else if (isSameTag(newStartVnode, oldEndVnode)) {
+        patch(oldEndVnode, newStartVnode);
+        parent.insertBefore(oldEndVnode.el, oldStartVnode.el);
+        newStartVnode = newChildren[++newStartIndex];
+        oldEndVnode = oldChildren[--oldEndIndex];
+      } else {
+        // 暴力对比  
+        // 未进入while之前 已经存了map对象 {key:index}
+        // 如果之前的条件都未成立 通过新虚拟节点的key 去map中查找 到index 
+        var moveIndex = map[newStartVnode.key];
+
+        if (!moveIndex) {
+          // 如果没查找到 将虚拟节点转为真实dom 添加到父节点中
+          parent.insertBefore(createElm(newStartVnode), oldStartVnode.el);
+        } else {
+          // 通过index 可以拿到旧虚拟节点
+          var moveVnode = oldChildren[moveIndex];
+          patch(moveVnode, newStartVnode); // 对比节点
+
+          oldChildren[moveIndex] = null; // 将旧节点置为null 进行占位
+
+          parent.insertBefore(moveVnode.el, oldStartVnode.el); // 添加真实dom
+        }
+
+        newStartVnode = newChildren[++newStartIndex];
+      }
+    } // 当跳出while循环
+    // 新的子节点开始大于结尾  
+    // 遍历开始和结尾的长度 通过newChildren拿到虚拟dom 从父节点中添加
+
+
+    if (newStartIndex <= newEndIndex) {
+      for (var i = newStartIndex; i <= newEndIndex; i++) {
+        // newChildren[newEndIndex+1] 代表从开始加或者从结尾加
+        var el = newChildren[newEndIndex + 1] == null ? null : newChildren[newEndIndex + 1].el;
+        parent.insertBefore(createElm(newChildren[i]), el);
+      }
+    } // 旧的子节点开始大于结尾
+    // 遍历开始和结尾的长度 父节点中移除子节点
+
+
+    if (oldStartIndex <= oldEndIndex) {
+      for (var _i = oldStartIndex; _i <= oldEndIndex; _i++) {
+        if (!oldChildren[_i]) {
+          parent.removeChild(oldChildren[_i].el);
         }
       }
     }
@@ -1097,8 +1252,17 @@
     Vue.prototype._update = function (vnode) {
       // 混入_update更新界面的方法 接收参数（执行render函数后生成的对象）
       var vm = this;
-      vm.$el = patch(vm.$el, vnode); // 需要用虚拟节点创建出真实节点 替换掉 真实的$el
-      // 我要通过虚拟节点 渲染出真实的dom
+      var preNode = vm.vnode; // vm上取虚拟节点  第一次编译时为undefined
+
+      vm.vnode = vnode; // 之后进行赋值
+
+      if (!preNode) {
+        // 没有虚拟节点 用编译后的虚拟节点创建出真实节点 替换掉 真实的$el
+        vm.$el = patch(vm.$el, vnode); // 我要通过虚拟节点 渲染出真实的dom
+      } else {
+        // 有虚拟节点  前后进行对比替换
+        vm.$el = patch(preNode, vnode);
+      }
     }, Vue.prototype.$nextTick = nextTick;
   } // 后续可能还会调用此函数 数据刷新更新界面
 
@@ -1242,7 +1406,7 @@
   stateMixin(Vue);
   globalApi(Vue); // 全局api
 
-  lifecycleMixin(Vue);
+  lifecycleMixin(Vue); // import {compileToFunction} from './compiler/index'
 
   return Vue;
 

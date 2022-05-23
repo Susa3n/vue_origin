@@ -6,9 +6,14 @@ import { callHook } from "./init";
 export function lifecycleMixin(Vue) {
   Vue.prototype._update = function (vnode) { // 混入_update更新界面的方法 接收参数（执行render函数后生成的对象）
     let vm = this
-    vm.$el = patch(vm.$el, vnode); // 需要用虚拟节点创建出真实节点 替换掉 真实的$el
-    // 我要通过虚拟节点 渲染出真实的dom
-
+    const preNode = vm.vnode // vm上取虚拟节点  第一次编译时为undefined
+    vm.vnode = vnode // 之后进行赋值
+    if(!preNode) { // 没有虚拟节点 用编译后的虚拟节点创建出真实节点 替换掉 真实的$el
+      vm.$el = patch(vm.$el, vnode); 
+      // 我要通过虚拟节点 渲染出真实的dom
+    }else { // 有虚拟节点  前后进行对比替换
+      vm.$el = patch(preNode, vnode)
+    }
   },
 
     Vue.prototype.$nextTick = nextTick
